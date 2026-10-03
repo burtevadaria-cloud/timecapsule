@@ -79,7 +79,6 @@ $navLink = function (string $key, string $href, string $label) use ($nav, $view)
     <strong>Daria Burteva</strong>
   </div>
 </footer>
-<?php broken(
 
 </body>
 </html>
