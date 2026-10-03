@@ -6,7 +6,7 @@
 **Выбранный уровень:** Продвинутый  
 **Выбранное приложение:** open_capsules_php_oop  
 **Вариант деплоя:** Вариант A   
-**Ссылка на репозиторий:** https://github.com/burteva-cloud/timecapsule
+**Ссылка на репозиторий:** https://github.com/burtevadaria-cloud/timecapsule
 
 ---
 
@@ -66,7 +66,7 @@
 
 **Architecture Decision Record:**
 Файл с описанием выбора способа деплоя сохранён в репозитории: 
-[docs/adr/0001-deploy-method.md](https://github.com/burtevadaria-cloud/timecapsule/docs/adr/0001-deploy-method.md)
+[docs/adr/0001-deploy-method.md][(https://github.com/burtevadaria-cloud/timecapsule/blob/main/docs/adr/0001-deploy-method.md))
 
 ---
 
