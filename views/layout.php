@@ -77,6 +77,7 @@ $navLink = function (string $key, string $href, string $label) use ($nav, $view)
     <?php // Which machine answered, and where the data and uploaded files are kept. ?>
     Served by <code><?= $view->e($hostname) ?></code> · DB: <code><?= $view->e($dbHost) ?></code> · Files: <code>local disk (<?= $view->e($uploadDir) ?>)</code><br>
     <strong>Daria Burteva</strong>
+    <strong>LR3</strong>
   </div>
 </footer>
 
