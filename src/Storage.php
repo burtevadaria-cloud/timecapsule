@@ -4,26 +4,36 @@ declare(strict_types=1);
 
 namespace App;
 
-use App\Http\HttpException;
-use RuntimeException;
+use Aws\S3\S3Client;
 
-// File storage for capsule attachments, in a folder on the local disk.
-// This is the only class that reads or writes uploaded files.
 class Storage
 {
-    public function __construct(private readonly string $directory)
+    private S3Client $client;
+    private string $bucket;
+
+    public function __construct(private readonly string $directory = '')
     {
+        $this->bucket = $_ENV['S3_BUCKET'] ?? getenv('S3_BUCKET') ?: 'timecapsule-dev-uploads-burtevadaria';
+        $region = $_ENV['AWS_REGION'] ?? getenv('AWS_REGION') ?: 'eu-central-1';
+
+        $this->client = new S3Client([
+            'version' => 'latest',
+            'region' => $region,
+        ]);
     }
 
-    // Save an uploaded file ($_FILES['...'] entry) and return its stored name, e.g. "3f9a...e1.png".
-    // The name is random, so nobody can guess other people's file names.
     public function save(array $uploadedFile, string $extension): string
     {
         $storedName = bin2hex(random_bytes(16)) . '.' . $extension;
+        $contentType = mime_content_type($uploadedFile['tmp_name']) ?: ($uploadedFile['type'] ?? 'application/octet-stream');
 
-        if (!move_uploaded_file($uploadedFile['tmp_name'], $this->path($storedName))) {
-            throw new RuntimeException('Could not save the uploaded file.');
-        }
+        $this->client->putObject([
+            'Bucket' => $this->bucket,
+            'Key' => 'uploads/' . $storedName,
+            'SourceFile' => $uploadedFile['tmp_name'],
+            'ContentType' => $contentType,
+        ]);
+
         return $storedName;
     }
 
@@ -33,45 +43,49 @@ class Storage
             return;
         }
 
-        $path = $this->path($storedName);
-        if (is_file($path)) {
-            unlink($path);
-        }
+        $this->client->deleteObject([
+            'Bucket' => $this->bucket,
+            'Key' => 'uploads/' . basename($storedName),
+        ]);
     }
 
-    // Send a stored file to the browser.
-    // $disposition: "inline" (show in the browser) or "attachment" (download).
     public function stream(string $storedName, string $mime, string $downloadName, string $disposition): void
     {
-        $path = $this->path($storedName);
-        if (!is_file($path)) {
-            throw new HttpException(404);
-        }
-
-        // Keep only safe characters for the plain filename; the UTF-8 name goes in filename*.
         $asciiName = preg_replace('/[^A-Za-z0-9._ -]/', '_', $downloadName);
-
-        header('Content-Type: ' . $mime);
-        header('Content-Length: ' . filesize($path));
-        header(sprintf(
-            'Content-Disposition: %s; filename="%s"; filename*=UTF-8\'\'%s',
+        $contentDisposition = sprintf(
+            '%s; filename="%s"; filename*=UTF-8\'\'%s',
             $disposition,
             $asciiName,
             rawurlencode($downloadName)
-        ));
-        header('X-Content-Type-Options: nosniff'); // the browser must trust our Content-Type
+        );
 
-        readfile($path);
-    }
+        $cmd = $this->client->getCommand('GetObject', [
+            'Bucket' => $this->bucket,
+            'Key' => 'uploads/' . basename($storedName),
+            'ResponseContentType' => $mime,
+            'ResponseContentDisposition' => $contentDisposition,
+        ]);
 
-    // Full path of a stored file. The folder is created on first use.
-    private function path(string $storedName): string
-    {
-        if (!is_dir($this->directory)) {
-            mkdir($this->directory, 0775, true);
-        }
+        $request = $this->client->createPresignedRequest($cmd, '+5 minutes');
 
-        // basename() makes sure we never touch anything outside the upload folder.
-        return rtrim($this->directory, '/') . '/' . basename($storedName);
+        header('Location: ' . (string) $request->getUri(), true, 302);
+        exit;
     }
 }
+EOF
+
+sudo sed -i 's/local disk (storage\/uploads)/timecapsule-dev-uploads-burtevadaria/g' /var/www/timecapsule/views/layout.php
+
+grep -q "S3_BUCKET" /var/www/timecapsule/.env || sudo tee -a /var/www/timecapsule/.env > /dev/null << 'EOF'
+S3_BUCKET=timecapsule-dev-uploads-burtevadaria
+AWS_REGION=eu-central-1
+EOF
+
+grep -q "S3_BUCKET" /var/www/timecapsule/.env.example || sudo tee -a /var/www/timecapsule/.env.example > /dev/null << 'EOF'
+S3_BUCKET=timecapsule-dev-uploads-burtevadaria
+AWS_REGION=eu-central-1
+EOF
+
+sudo chown -R ec2-user:apache /var/www/timecapsule
+composer require aws/aws-sdk-php
+sudo systemctl restart php-fpm httpd
